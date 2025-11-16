@@ -1,0 +1,374 @@
+import Result "mo:base/Result";
+import Text "mo:base/Text";
+import Blob "mo:base/Blob";
+import Debug "mo:base/Debug";
+import Principal "mo:base/Principal";
+import Option "mo:base/Option";
+import Int "mo:base/Int";
+import Time "mo:base/Time";
+
+import HttpTypes "mo:http-types";
+import Map "mo:map/Map";
+import IC "mo:ic";
+
+import AuthCleanup "mo:mcp-motoko-sdk/auth/Cleanup";
+import AuthState "mo:mcp-motoko-sdk/auth/State";
+import AuthTypes "mo:mcp-motoko-sdk/auth/Types";
+
+import Mcp "mo:mcp-motoko-sdk/mcp/Mcp";
+import McpTypes "mo:mcp-motoko-sdk/mcp/Types";
+import HttpHandler "mo:mcp-motoko-sdk/mcp/HttpHandler";
+import Cleanup "mo:mcp-motoko-sdk/mcp/Cleanup";
+import State "mo:mcp-motoko-sdk/mcp/State";
+import Payments "mo:mcp-motoko-sdk/mcp/Payments";
+import HttpAssets "mo:mcp-motoko-sdk/mcp/HttpAssets";
+import Beacon "mo:mcp-motoko-sdk/mcp/Beacon";
+import ApiKey "mo:mcp-motoko-sdk/auth/ApiKey";
+
+import SrvTypes "mo:mcp-motoko-sdk/server/Types";
+
+// Import EXT integration
+import ExtIntegration "ExtIntegration";
+
+// Import tool modules
+import ToolContext "tools/ToolContext";
+import WalletShowNfts "tools/wallet_show_nfts";
+import WalletTransferNft "tools/wallet_transfer_nft";
+import WalletListNftForSale "tools/wallet_list_nft_for_sale";
+import WalletGetId "tools/wallet_get_id";
+import WalletMyListings "tools/wallet_my_listings";
+import WalletExploreMarketplace "tools/wallet_explore_marketplace";
+import WalletPurchaseNft "tools/wallet_purchase_nft";
+
+shared ({ caller = deployer }) persistent actor class McpServer(
+  args : ?{
+    owner : ?Principal;
+  }
+) = self {
+
+  // The canister owner, who can manage treasury funds.
+  // Defaults to the deployer if not specified.
+  var owner : Principal = Option.get(do ? { args!.owner! }, deployer);
+
+  // State for certified HTTP assets (like /.well-known/...)
+  var stable_http_assets : HttpAssets.StableEntries = [];
+  transient let http_assets = HttpAssets.init(stable_http_assets);
+
+  // Resource contents stored in memory for simplicity.
+  var resourceContents = [
+    ("file:///README.md", "# EXT NFT Wallet\n\nA bridge wallet for transferring EXT NFTs to subaccount-based destinations."),
+  ];
+
+  // The application context that holds our state.
+  var appContext : McpTypes.AppContext = State.init(resourceContents);
+
+  // =================================================================================
+  // --- AUTHENTICATION ENABLED ---
+  // Owner-only tool access for NFT transfers
+  // =================================================================================
+
+  let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
+  let allowanceUrl = "https://prometheusprotocol.org/connections";
+  let requiredScopes = ["openid"];
+
+  //function to transform the response for jwks client
+  public query func transformJwksResponse({
+    context : Blob; // required by IC API but unused
+    response : IC.HttpRequestResult;
+  }) : async IC.HttpRequestResult {
+    ignore context; // suppress warning
+    {
+      response with headers = []; // not intersted in the headers
+    };
+  };
+
+  // Initialize the auth context with the issuer URL and required scopes.
+  let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
+    Principal.fromActor(self),
+    owner,
+    issuerUrl,
+    requiredScopes,
+    transformJwksResponse,
+  );
+
+  // =================================================================================
+  // --- USAGE ANALYTICS (BEACON) ENABLED ---
+  // =================================================================================
+
+  let beaconCanisterId = Principal.fromText("m63pw-fqaaa-aaaai-q33pa-cai");
+  transient let beaconContext : ?Beacon.BeaconContext = ?Beacon.init(
+    beaconCanisterId,
+    ?(15 * 60), // Send a beacon every 15 minutes
+  );
+
+  // --- Timers ---
+  Cleanup.startCleanupTimer<system>(appContext);
+
+  // The AuthCleanup timer only needs to run if authentication is enabled.
+  switch (authContext) {
+    case (?ctx) { AuthCleanup.startCleanupTimer<system>(ctx) };
+    case (null) { Debug.print("Authentication is disabled.") };
+  };
+
+  // The Beacon timer only needs to run if the beacon is enabled.
+  switch (beaconContext) {
+    case (?ctx) { Beacon.startTimer<system>(ctx) };
+    case (null) { Debug.print("Beacon is disabled.") };
+  };
+
+  // --- 1. DEFINE YOUR RESOURCES & TOOLS ---
+  transient let resources : [McpTypes.Resource] = [
+    {
+      uri = "file:///README.md";
+      name = "README.md";
+      title = ?"EXT Wallet Documentation";
+      description = ?"Bridge wallet for transferring EXT NFTs to subaccount-based destinations";
+      mimeType = ?"text/markdown";
+    },
+  ];
+
+  // Create the tool context that will be passed to all tools (currently unused)
+  transient let _toolContext : ToolContext.ToolContext = {
+    canisterPrincipal = Principal.fromActor(self);
+    owner = owner;
+    appContext = appContext;
+  };
+
+  // Import tool configurations from separate modules
+  transient let tools : [McpTypes.Tool] = [
+    WalletShowNfts.config(),
+    WalletTransferNft.config(),
+    WalletListNftForSale.config(),
+    WalletGetId.config(),
+    WalletMyListings.config(),
+    WalletExploreMarketplace.config(),
+    WalletPurchaseNft.config(),
+  ];
+
+  // --- 2. CONFIGURE THE SDK ---
+  transient let mcpConfig : McpTypes.McpConfig = {
+    self = Principal.fromActor(self);
+    allowanceUrl = ?allowanceUrl;
+    serverInfo = {
+      name = "ext-wallet";
+      title = "EXT NFT Wallet";
+      version = "0.1.0";
+    };
+    resources = resources;
+    resourceReader = func(uri) {
+      Map.get(appContext.resourceContents, Map.thash, uri);
+    };
+    tools = tools;
+    toolImplementations = [
+      ("wallet_show_nfts", WalletShowNfts.handle(Principal.fromActor(self))),
+      ("wallet_transfer_nft", WalletTransferNft.handle(Principal.fromActor(self), owner)),
+      ("wallet_list_nft_for_sale", WalletListNftForSale.handle(Principal.fromActor(self), owner)),
+      ("wallet_get_id", WalletGetId.handle(Principal.fromActor(self))),
+      ("wallet_my_listings", WalletMyListings.handle(Principal.fromActor(self))),
+      ("wallet_explore_marketplace", WalletExploreMarketplace.handle(Principal.fromActor(self))),
+      ("wallet_purchase_nft", WalletPurchaseNft.handle(Principal.fromActor(self), owner)),
+    ];
+    beacon = beaconContext;
+  };
+
+  // --- 3. CREATE THE SERVER LOGIC ---
+  transient let mcpServer = Mcp.createServer(mcpConfig);
+
+  // --- PUBLIC ENTRY POINTS ---
+
+  // Do not remove these public methods below. They are required for the MCP Registry and MCP Orchestrator
+  // to manage the canister upgrades and installs, handle payments, and allow owner only methods.
+
+  /// Get the current owner of the canister.
+  public query func get_owner() : async Principal { return owner };
+
+  /// Set a new owner for the canister. Only the current owner can call this.
+  public shared ({ caller }) func set_owner(new_owner : Principal) : async Result.Result<(), Payments.TreasuryError> {
+    if (caller != owner) { return #err(#NotOwner) };
+    owner := new_owner;
+    return #ok(());
+  };
+
+  /// Get the canister's balance of a specific ICRC-1 token.
+  public shared func get_treasury_balance(ledger_id : Principal) : async Nat {
+    return await Payments.get_treasury_balance(Principal.fromActor(self), ledger_id);
+  };
+
+  /// Withdraw tokens from the canister's treasury to a specified destination.
+  public shared ({ caller }) func withdraw(
+    ledger_id : Principal,
+    amount : Nat,
+    destination : Payments.Destination,
+  ) : async Result.Result<Nat, Payments.TreasuryError> {
+    return await Payments.withdraw(
+      caller,
+      owner,
+      ledger_id,
+      amount,
+      destination,
+    );
+  };
+
+  // Helper to create the HTTP context for each request.
+  private func _create_http_context() : HttpHandler.Context {
+    return {
+      self = Principal.fromActor(self);
+      active_streams = appContext.activeStreams;
+      mcp_server = mcpServer;
+      streaming_callback = http_request_streaming_callback;
+      // This passes the optional auth context to the handler.
+      // If it's `null`, the handler will skip all auth checks.
+      auth = authContext;
+      http_asset_cache = ?http_assets.cache;
+      mcp_path = ?"/mcp";
+    };
+  };
+
+  /// Handle incoming HTTP requests.
+  public query func http_request(req : SrvTypes.HttpRequest) : async SrvTypes.HttpResponse {
+    let ctx : HttpHandler.Context = _create_http_context();
+    // Ask the SDK to handle the request
+    switch (HttpHandler.http_request(ctx, req)) {
+      case (?mcpResponse) {
+        // The SDK handled it, so we return its response.
+        return mcpResponse;
+      };
+      case (null) {
+        // The SDK ignored it. Now we can handle our own custom routes.
+        if (req.url == "/") {
+          return {
+            status_code = 200;
+            headers = [("Content-Type", "text/html")];
+            body = Text.encodeUtf8("<h1>EXT NFT Wallet</h1><p>Bridge wallet for transferring EXT NFTs to subaccount-based destinations.</p>");
+            upgrade = null;
+            streaming_strategy = null;
+          };
+        } else {
+          // Return a 404 for any other unhandled routes.
+          return {
+            status_code = 404;
+            headers = [];
+            body = Blob.fromArray([]);
+            upgrade = null;
+            streaming_strategy = null;
+          };
+        };
+      };
+    };
+  };
+
+  /// Handle incoming HTTP requests that modify state (e.g., POST).
+  public shared func http_request_update(req : SrvTypes.HttpRequest) : async SrvTypes.HttpResponse {
+    let ctx : HttpHandler.Context = _create_http_context();
+
+    // Ask the SDK to handle the request
+    let mcpResponse = await HttpHandler.http_request_update(ctx, req);
+
+    switch (mcpResponse) {
+      case (?res) {
+        // The SDK handled it.
+        return res;
+      };
+      case (null) {
+        // The SDK ignored it. Handle custom update calls here.
+        return {
+          status_code = 404;
+          headers = [];
+          body = Blob.fromArray([]);
+          upgrade = null;
+          streaming_strategy = null;
+        };
+      };
+    };
+  };
+
+  /// Handle streaming callbacks for large HTTP responses.
+  public query func http_request_streaming_callback(token : HttpTypes.StreamingToken) : async ?HttpTypes.StreamingCallbackResponse {
+    let ctx : HttpHandler.Context = _create_http_context();
+    return HttpHandler.http_request_streaming_callback(ctx, token);
+  };
+
+  // --- WALLET-SPECIFIC QUERY METHOD ---
+
+  /// Get this wallet's account ID for receiving NFTs
+  public query func get_wallet_account_id() : async Text {
+    return ExtIntegration.principalToAccountIdentifier(Principal.fromActor(self), null);
+  };
+
+  // --- CANISTER LIFECYCLE MANAGEMENT ---
+
+  system func preupgrade() {
+    stable_http_assets := HttpAssets.preupgrade(http_assets);
+  };
+
+  system func postupgrade() {
+    HttpAssets.postupgrade(http_assets);
+  };
+
+  /**
+   * Creates a new API key. This API key is linked to the caller's principal.
+   * @param name A human-readable name for the key.
+   * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
+   */
+  public shared (msg) func create_my_api_key(name : Text, scopes : [Text]) : async Text {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        return await ApiKey.create_my_api_key(
+          ctx,
+          msg.caller,
+          name,
+          scopes,
+        );
+      };
+    };
+  };
+
+  /** Revoke (delete) an API key owned by the caller.
+   * @param key_id The ID of the key to revoke.
+   * @returns True if the key was found and revoked, false otherwise.
+   */
+  public shared (msg) func revoke_my_api_key(key_id : Text) : async () {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        return ApiKey.revoke_my_api_key(ctx, msg.caller, key_id);
+      };
+    };
+  };
+
+  /** List all API keys owned by the caller.
+   * @returns A list of API key metadata (but not the raw keys).
+   */
+  public query (msg) func list_my_api_keys() : async [AuthTypes.ApiKeyMetadata] {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        return ApiKey.list_my_api_keys(ctx, msg.caller);
+      };
+    };
+  };
+
+  public type UpgradeFinishedResult = {
+    #InProgress : Nat;
+    #Failed : (Nat, Text);
+    #Success : Nat;
+  };
+  private func natNow() : Nat {
+    return Int.abs(Time.now());
+  };
+  /* Return success after post-install/upgrade operations complete.
+   * The Nat value is a timestamp (in nanoseconds) of when the upgrade finished.
+   * If the upgrade is still in progress, return #InProgress with a timestamp of when it started.
+   * If the upgrade failed, return #Failed with a timestamp and an error message.
+   */
+  public func icrc120_upgrade_finished() : async UpgradeFinishedResult {
+    #Success(natNow());
+  };
+};

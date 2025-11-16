@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "ext-wallet-dev": {
+      "type": "http",
+      "url": "https://7yxg6-zqaaa-aaaai-q37uq-cai.icp0.io/mcp",
+      "headers": {
+        "x-api-key": "6d68077f90f04c696f52d5f25d8f5c4816314b658e128f3ac1b18a2a583117ad"
+      }
+    }
+  }
+}

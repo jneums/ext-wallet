@@ -1,0 +1,34 @@
+# Prometheus Application Manifest
+# This is the permanent, unique identifier for your application.
+namespace: io.github.jneums.ext-wallet
+
+# This section contains all data for a specific version. This entire package will be submitted for review and locked to the audit of this version.
+# deployment_type: 'global' (shared infrastructure, recommended) or 'provisioned' (dedicated resources)
+submission:
+  name: EXT Wallet
+  description: A complete EXT NFT wallet for managing your digital collectibles. Browse the marketplace, buy NFTs, list them for sale, or transfer them anywhere on the Internet Computer.
+  publisher: Atlas Labs
+  category: Finance
+  deployment_type: provisioned
+  repo_url: https://github.com/jneums/ext-wallet
+  mcp_path: /mcp
+  why_this_app: Traditional wallets struggle with EXT NFTs and subaccount transfers. This dedicated wallet solves these problems while adding marketplace integration, letting you buy, sell, and manage your NFTs through simple AI commands without leaving your workflow.
+  key_features:
+    - Browse and purchase NFTs from the marketplace
+    - List your NFTs for sale with flexible pricing
+    - Transfer NFTs to any principal or account ID (including subaccounts)
+    - View your NFT collection and active listings
+    - Explore marketplace with sorting and filtering
+  tags:
+    - wallet
+    - nft
+    - ext
+    - marketplace
+    - trading
+  visuals:
+    icon_url: https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/icon-ext-wallet.webp
+    banner_url: https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/banner-ext-wallet.webp
+    gallery_images:  
+      - https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/banner-ext-wallet.webp
+  git_commit: marketplace-integration
+  wasm_path: .dfx/local/canisters/my_mcp_server/my_mcp_server.wasm
