@@ -1,18 +1,20 @@
-# Prometheus Application Manifest
-# This is the permanent, unique identifier for your application.
 namespace: io.github.jneums.ext-wallet
-
-# This section contains all data for a specific version. This entire package will be submitted for review and locked to the audit of this version.
-# deployment_type: 'global' (shared infrastructure, recommended) or 'provisioned' (dedicated resources)
 submission:
   name: EXT Wallet
-  description: A complete EXT NFT wallet for managing your digital collectibles. Browse the marketplace, buy NFTs, list them for sale, or transfer them anywhere on the Internet Computer.
+  description: >-
+    A complete EXT NFT wallet for managing your digital collectibles. Browse the
+    marketplace, buy NFTs, list them for sale, or transfer them anywhere on the
+    Internet Computer.
   publisher: Atlas Labs
   category: Finance
   deployment_type: provisioned
   repo_url: https://github.com/jneums/ext-wallet
   mcp_path: /mcp
-  why_this_app: Designed for AI agents to autonomously manage NFTs on your behalf. While traditional wallets require manual UI interactions, this wallet exposes all marketplace operations through simple tool calls, enabling agents to buy, sell, and transfer NFTs based on your goals without you touching a browser.
+  why_this_app: >-
+    Designed for AI agents to autonomously manage NFTs on your behalf. While
+    traditional wallets require manual UI interactions, this wallet exposes all
+    marketplace operations through simple tool calls, enabling agents to buy,
+    sell, and transfer NFTs based on your goals without you touching a browser.
   key_features:
     - Browse and purchase NFTs from the marketplace
     - List your NFTs for sale with flexible pricing
@@ -26,9 +28,12 @@ submission:
     - marketplace
     - trading
   visuals:
-    icon_url: https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/icon-ext-wallet.webp
-    banner_url: https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/banner-ext-wallet.webp
-    gallery_images:  
-      - https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/banner-ext-wallet.webp
-  git_commit: marketplace-integration
-  wasm_path: .dfx/local/canisters/my_mcp_server/my_mcp_server.wasm
+    icon_url: >-
+      https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/icon-ext-wallet.webp
+    banner_url: >-
+      https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/banner-ext-wallet.webp
+    gallery_images:
+      - >-
+        https://github.com/jneums/ext-wallet/releases/download/v1.0.0-assets/banner-ext-wallet.webp
+  git_commit: 7165c7aa412f44bad8a34f2af5262df97844d163
+  wasm_path: ./out/out_Linux_x86_64.wasm
