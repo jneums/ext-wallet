@@ -2,7 +2,7 @@
 
 A complete EXT NFT wallet with integrated marketplace functionality, built as a Motoko MCP server for the [Prometheus Protocol](https://prometheusprotocol.org) ecosystem.
 
-**Why EXT Wallet?** Traditional wallets struggle with EXT NFTs and subaccount transfers. This dedicated wallet solves these problems while adding marketplace integration, letting you buy, sell, and manage your NFTs through simple AI commands.
+**Why EXT Wallet?** Designed for AI agents to autonomously manage NFTs on your behalf. While traditional wallets require manual UI interactions, this wallet exposes all marketplace operations through simple tool calls, enabling agents to buy, sell, and transfer NFTs based on your goals.
 
 ## Features
 

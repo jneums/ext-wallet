@@ -12,7 +12,7 @@ submission:
   deployment_type: provisioned
   repo_url: https://github.com/jneums/ext-wallet
   mcp_path: /mcp
-  why_this_app: Traditional wallets struggle with EXT NFTs and subaccount transfers. This dedicated wallet solves these problems while adding marketplace integration, letting you buy, sell, and manage your NFTs through simple AI commands without leaving your workflow.
+  why_this_app: Designed for AI agents to autonomously manage NFTs on your behalf. While traditional wallets require manual UI interactions, this wallet exposes all marketplace operations through simple tool calls, enabling agents to buy, sell, and transfer NFTs based on your goals without you touching a browser.
   key_features:
     - Browse and purchase NFTs from the marketplace
     - List your NFTs for sale with flexible pricing
